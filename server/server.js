@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+require('dotenv').config();
 const { Task, Schedule, Setting, DailyNote, AIHistory, initDatabase } = require('./models');
 
 const app = express();
