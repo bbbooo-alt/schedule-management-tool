@@ -493,20 +493,22 @@
                 const slotId = slotElement.getAttribute('data-slot-id');
                 if (!slotId) return;
 
-                // 更新日程安排
-                setSchedule(prev => {
-                    const newSchedule = { ...prev };
-                    // 移除该任务在其他时间块的安排
-                    Object.keys(newSchedule).forEach(key => {
-                        if (newSchedule[key] === task.id) {
-                            delete newSchedule[key];
-                        }
-                    });
-                    // 添加到新时间块
-                    newSchedule[slotId] = task.id;
-                    return newSchedule;
-                });
-            }, []);
+                // 检查该时间块是否已有任务
+                const existingTaskId = schedule[slotId];
+                if (existingTaskId) {
+                    // 如果该时间块已有任务，先移除它（对于临时任务要删除）
+                    const existingTask = getTaskById(existingTaskId);
+                    if (existingTask && !existingTask.isCommon) {
+                        setTempTasks(prev => prev.filter(t => t.id !== existingTaskId));
+                    }
+                }
+
+                // 更新日程安排 - 对于常用任务，允许在多个时间块同时存在
+                setSchedule(prev => ({
+                    ...prev,
+                    [slotId]: task.id
+                }));
+            }, [schedule]);
 
             const handleMouseMove = useCallback((e) => {
                 if (!draggedTask) {
