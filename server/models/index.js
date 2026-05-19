@@ -50,8 +50,7 @@ const Schedule = sequelize.define('Schedule', {
   slotId: {
     type: DataTypes.STRING,
     allowNull: false,
-    field: 'slot_id',
-    unique: true
+    field: 'slot_id'
   },
   taskId: {
     type: DataTypes.STRING,
@@ -60,11 +59,17 @@ const Schedule = sequelize.define('Schedule', {
   },
   date: {
     type: DataTypes.DATEONLY,
-    defaultValue: Sequelize.NOW
+    allowNull: false
   }
 }, {
   tableName: 'schedules',
-  timestamps: false
+  timestamps: false,
+  indexes: [
+    {
+      unique: true,
+      fields: ['slot_id', 'date']
+    }
+  ]
 });
 
 // 定义 Setting 模型（设置）

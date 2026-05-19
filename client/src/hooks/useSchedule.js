@@ -1,12 +1,24 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   fetchData,
+  fetchScheduleDates,
   createTask,
   deleteTask,
   addToSchedule,
   removeFromSchedule,
   updateSetting
 } from '../services/api';
+
+// 获取今天的日期字符串 YYYY-MM-DD
+const getTodayString = () => {
+  return new Date().toISOString().split('T')[0];
+};
+
+// 判断是否是过去的日期
+const isPastDate = (dateStr) => {
+  const today = getTodayString();
+  return dateStr < today;
+};
 
 export const useSchedule = () => {
   const [granularity, setGranularityState] = useState(60);
@@ -15,26 +27,39 @@ export const useSchedule = () => {
   const [schedule, setSchedule] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [currentDate, setCurrentDate] = useState(getTodayString());
+  const [scheduledDates, setScheduledDates] = useState([]);
 
   // 从服务器加载数据
+  const loadData = useCallback(async (date = currentDate) => {
+    try {
+      setLoading(true);
+      const [data, dates] = await Promise.all([
+        fetchData(date),
+        fetchScheduleDates()
+      ]);
+      setCommonTasks(data.commonTasks || []);
+      setTempTasks(data.tempTasks || []);
+      setSchedule(data.schedule || {});
+      setGranularityState(data.granularity || 60);
+      setScheduledDates(dates || []);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentDate]);
+
+  // 初始加载
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const data = await fetchData();
-        setCommonTasks(data.commonTasks || []);
-        setTempTasks(data.tempTasks || []);
-        setSchedule(data.schedule || {});
-        setGranularityState(data.granularity || 60);
-        setError(null);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
     loadData();
-  }, []);
+  }, [loadData]);
+
+  // 切换日期时重新加载
+  useEffect(() => {
+    loadData(currentDate);
+  }, [currentDate, loadData]);
 
   // 设置粒度并保存到数据库
   const setGranularity = useCallback(async (value) => {
@@ -44,6 +69,11 @@ export const useSchedule = () => {
     } catch (err) {
       setError(err.message);
     }
+  }, []);
+
+  // 切换日期
+  const changeDate = useCallback((date) => {
+    setCurrentDate(date);
   }, []);
 
   // 添加常用任务
@@ -110,22 +140,38 @@ export const useSchedule = () => {
 
   // 添加任务到时间块
   const addTaskToSlot = useCallback(async (slotId, taskId) => {
+    // 过去的日期不允许修改
+    if (isPastDate(currentDate)) {
+      setError('不能修改过去的计划');
+      return;
+    }
+    
     try {
-      await addToSchedule(slotId, taskId);
+      await addToSchedule(slotId, taskId, currentDate);
       setSchedule(prev => ({
         ...prev,
         [slotId]: taskId
       }));
+      // 更新有计划的日期列表
+      if (!scheduledDates.includes(currentDate)) {
+        setScheduledDates(prev => [...prev, currentDate]);
+      }
     } catch (err) {
       setError(err.message);
     }
-  }, []);
+  }, [currentDate, scheduledDates]);
 
   // 从时间块移除任务
   const removeTaskFromSlot = useCallback(async (slotId) => {
+    // 过去的日期不允许修改
+    if (isPastDate(currentDate)) {
+      setError('不能修改过去的计划');
+      return;
+    }
+    
     try {
       const taskId = schedule[slotId];
-      await removeFromSchedule(slotId);
+      await removeFromSchedule(slotId, currentDate);
       
       setSchedule(prev => {
         const newSchedule = { ...prev };
@@ -142,7 +188,7 @@ export const useSchedule = () => {
     } catch (err) {
       setError(err.message);
     }
-  }, [schedule]);
+  }, [currentDate, schedule]);
 
   // 获取所有任务
   const allTasks = useMemo(() => [...commonTasks, ...tempTasks], [commonTasks, tempTasks]);
@@ -152,28 +198,19 @@ export const useSchedule = () => {
     return allTasks.find(t => t.id === taskId);
   }, [allTasks]);
 
-  // 获取未安排的临时任务
+  // 获取未安排的临时任务（当前日期）
   const unscheduledTempTasks = useMemo(() =>
     tempTasks.filter(task => !Object.values(schedule).includes(task.id)),
     [tempTasks, schedule]
   );
 
+  // 判断当前是否是过去日期
+  const isReadOnly = useMemo(() => isPastDate(currentDate), [currentDate]);
+
   // 刷新数据
   const refreshData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await fetchData();
-      setCommonTasks(data.commonTasks || []);
-      setTempTasks(data.tempTasks || []);
-      setSchedule(data.schedule || {});
-      setGranularityState(data.granularity || 60);
-      setError(null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    await loadData(currentDate);
+  }, [currentDate, loadData]);
 
   return {
     granularity,
@@ -185,6 +222,9 @@ export const useSchedule = () => {
     unscheduledTempTasks,
     loading,
     error,
+    currentDate,
+    scheduledDates,
+    isReadOnly,
     addCommonTask,
     deleteCommonTask,
     addTempTask,
@@ -192,6 +232,7 @@ export const useSchedule = () => {
     addTaskToSlot,
     removeTaskFromSlot,
     getTaskById,
+    changeDate,
     refreshData,
   };
 };

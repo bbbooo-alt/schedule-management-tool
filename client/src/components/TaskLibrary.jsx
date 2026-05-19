@@ -6,7 +6,8 @@ export const TaskLibrary = ({
   tempTasks, 
   onDragStart, 
   onDragEnd, 
-  onDeleteCommonTask 
+  onDeleteCommonTask,
+  isReadOnly
 }) => {
   const [activeTab, setActiveTab] = useState('common');
 
@@ -46,7 +47,12 @@ export const TaskLibrary = ({
       </div>
       
       <div className="p-5">
-        {activeTab === 'common' ? (
+        {isReadOnly ? (
+          <div className="text-center py-6 text-text-muted">
+            <p className="text-sm">历史计划不可修改</p>
+            <p className="text-xs opacity-70 mt-1">切换到今天的日期来管理任务</p>
+          </div>
+        ) : activeTab === 'common' ? (
           <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-hide">
             {commonTasks.length === 0 ? (
               <div className="text-center py-6 text-text-muted">

@@ -15,12 +15,16 @@ function App() {
     unscheduledTempTasks,
     loading,
     error,
+    currentDate,
+    scheduledDates,
+    isReadOnly,
     addCommonTask,
     deleteCommonTask,
     addTempTask,
     addTaskToSlot,
     removeTaskFromSlot,
     getTaskById,
+    changeDate,
   } = useSchedule();
 
   const timelineRef = useRef(null);
@@ -78,7 +82,14 @@ function App() {
 
   return (
     <div className="min-h-screen bg-bg">
-      <Header granularity={granularity} setGranularity={setGranularity} />
+      <Header 
+        granularity={granularity} 
+        setGranularity={setGranularity}
+        currentDate={currentDate}
+        scheduledDates={scheduledDates}
+        onDateChange={changeDate}
+        isReadOnly={isReadOnly}
+      />
 
       <main className="max-w-7xl mx-auto px-6 py-6">
         <div className="grid grid-cols-12 gap-6">
@@ -92,21 +103,24 @@ function App() {
               onRemoveTask={removeTaskFromSlot}
               onQuickAdd={handleQuickAdd}
               onTaskDrop={handleTaskDrop}
+              isReadOnly={isReadOnly}
             />
           </div>
 
           {/* 右侧：任务管理 */}
           <div className="col-span-4 space-y-4">
             {/* 添加常用任务 */}
-            <div className="glass-panel rounded-2xl shadow-soft p-5">
-              <h3 className="font-display text-base font-semibold mb-4 text-text">
-                添加常用任务
-              </h3>
-              <p className="text-xs text-text-muted mb-3">
-                日常频发任务（如健身、吃饭、学习）会保存在任务库中，可反复使用
-              </p>
-              <AddCommonTaskForm onAdd={addCommonTask} />
-            </div>
+            {!isReadOnly && (
+              <div className="glass-panel rounded-2xl shadow-soft p-5">
+                <h3 className="font-display text-base font-semibold mb-4 text-text">
+                  添加常用任务
+                </h3>
+                <p className="text-xs text-text-muted mb-3">
+                  日常频发任务（如健身、吃饭、学习）会保存在任务库中，可反复使用
+                </p>
+                <AddCommonTaskForm onAdd={addCommonTask} />
+              </div>
+            )}
 
             {/* 任务库 */}
             <TaskLibrary
@@ -115,6 +129,7 @@ function App() {
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
               onDeleteCommonTask={deleteCommonTask}
+              isReadOnly={isReadOnly}
             />
 
             {/* 统计信息 */}

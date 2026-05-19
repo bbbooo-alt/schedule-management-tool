@@ -9,13 +9,17 @@ export const TimeSlot = ({
   assignedTask, 
   onRemoveTask, 
   isDragOver, 
-  onQuickAdd 
+  onQuickAdd,
+  isReadOnly
 }) => {
   const { start, end } = formatTimeRange(slot, granularity);
   const isHourStart = slot.minute === 0;
   const [showQuickInput, setShowQuickInput] = useState(false);
 
   const handleClick = () => {
+    // 只读模式下不允许添加
+    if (isReadOnly) return;
+    
     if (!assignedTask && !showQuickInput) {
       setShowQuickInput(true);
     }
@@ -33,6 +37,7 @@ export const TimeSlot = ({
         time-slot relative border-b border-border
         ${isDragOver ? 'drag-over' : ''}
         ${isHourStart ? 'bg-gradient-to-r from-white to-bg' : ''}
+        ${isReadOnly ? 'opacity-90' : ''}
       `}
       style={{ minHeight: granularity <= 30 ? '60px' : '80px' }}
     >
@@ -47,23 +52,25 @@ export const TimeSlot = ({
         
         {/* 任务放置区域 */}
         <div 
-          className="flex-1 p-2 relative cursor-pointer"
+          className={`flex-1 p-2 relative ${isReadOnly ? '' : 'cursor-pointer'}`}
           onClick={handleClick}
         >
           {assignedTask ? (
             <div className="relative group">
               <TaskCard task={assignedTask} />
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemoveTask(slot.id);
-                }}
-                className="absolute -top-1 -right-1 w-5 h-5 bg-red-400 text-white rounded-full 
-                         opacity-0 group-hover:opacity-100 transition-opacity
-                         flex items-center justify-center text-xs shadow-sm"
-              >
-                ×
-              </button>
+              {!isReadOnly && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveTask(slot.id);
+                  }}
+                  className="absolute -top-1 -right-1 w-5 h-5 bg-red-400 text-white rounded-full 
+                           opacity-0 group-hover:opacity-100 transition-opacity
+                           flex items-center justify-center text-xs shadow-sm"
+                >
+                  ×
+                </button>
+              )}
             </div>
           ) : showQuickInput ? (
             <QuickInput
@@ -72,11 +79,13 @@ export const TimeSlot = ({
               placeholder={`${start} 添加临时任务...`}
             />
           ) : (
-            <div className="h-full min-h-[40px] rounded-lg border-2 border-dashed 
-                          border-border opacity-0 hover:opacity-100 
-                          transition-opacity flex items-center justify-center">
-              <span className="text-xs text-text-muted">点击添加临时任务</span>
-            </div>
+            !isReadOnly && (
+              <div className="h-full min-h-[40px] rounded-lg border-2 border-dashed 
+                            border-border opacity-0 hover:opacity-100 
+                            transition-opacity flex items-center justify-center">
+                <span className="text-xs text-text-muted">点击添加临时任务</span>
+              </div>
+            )
           )}
         </div>
       </div>

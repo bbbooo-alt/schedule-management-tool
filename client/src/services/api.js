@@ -56,27 +56,40 @@ export const deleteTask = async (id) => {
 
 // ========== 日程相关 API ==========
 
-// 获取今日日程
-export const fetchSchedule = async () => {
-  const response = await fetch(`${API_BASE_URL}/schedule`);
+// 获取指定日期的日程
+export const fetchSchedule = async (date) => {
+  const url = date 
+    ? `${API_BASE_URL}/schedule?date=${date}` 
+    : `${API_BASE_URL}/schedule`;
+  const response = await fetch(url);
   if (!response.ok) throw new Error('Failed to fetch schedule');
   return response.json();
 };
 
+// 获取有计划的日期列表
+export const fetchScheduleDates = async () => {
+  const response = await fetch(`${API_BASE_URL}/schedule/dates`);
+  if (!response.ok) throw new Error('Failed to fetch schedule dates');
+  return response.json();
+};
+
 // 添加任务到时间块
-export const addToSchedule = async (slotId, taskId) => {
+export const addToSchedule = async (slotId, taskId, date) => {
   const response = await fetch(`${API_BASE_URL}/schedule`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slotId, taskId }),
+    body: JSON.stringify({ slotId, taskId, date }),
   });
   if (!response.ok) throw new Error('Failed to add to schedule');
   return response.json();
 };
 
 // 从时间块移除任务
-export const removeFromSchedule = async (slotId) => {
-  const response = await fetch(`${API_BASE_URL}/schedule/${slotId}`, {
+export const removeFromSchedule = async (slotId, date) => {
+  const url = date 
+    ? `${API_BASE_URL}/schedule/${slotId}?date=${date}` 
+    : `${API_BASE_URL}/schedule/${slotId}`;
+  const response = await fetch(url, {
     method: 'DELETE',
   });
   if (!response.ok) throw new Error('Failed to remove from schedule');
@@ -106,8 +119,11 @@ export const updateSetting = async (key, value) => {
 // ========== 数据汇总 API ==========
 
 // 获取所有数据（兼容旧接口）
-export const fetchData = async () => {
-  const response = await fetch(`${API_BASE_URL}/data`);
+export const fetchData = async (date) => {
+  const url = date 
+    ? `${API_BASE_URL}/data?date=${date}` 
+    : `${API_BASE_URL}/data`;
+  const response = await fetch(url);
   if (!response.ok) throw new Error('Failed to fetch data');
   return response.json();
 };

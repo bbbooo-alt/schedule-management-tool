@@ -8,7 +8,8 @@ export const Timeline = forwardRef(({
   getTaskById,
   onRemoveTask,
   onQuickAdd,
-  onTaskDrop
+  onTaskDrop,
+  isReadOnly
 }, ref) => {
   const timeSlots = generateTimeSlots(granularity);
   const containerRef = useRef(null);
@@ -22,6 +23,13 @@ export const Timeline = forwardRef(({
   }));
 
   const handleDragEnd = useCallback((task, event) => {
+    // 只读模式下不允许拖拽
+    if (isReadOnly) {
+      setDraggedTask(null);
+      setDragOverSlot(null);
+      return;
+    }
+
     setDraggedTask(null);
     setDragOverSlot(null);
 
@@ -35,7 +43,7 @@ export const Timeline = forwardRef(({
     if (!slotId) return;
 
     onTaskDrop(slotId, task);
-  }, [onTaskDrop]);
+  }, [onTaskDrop, isReadOnly]);
 
   const handleMouseMove = useCallback((e) => {
     if (!draggedTask) {
@@ -68,10 +76,12 @@ export const Timeline = forwardRef(({
     <div className="glass-panel rounded-2xl shadow-soft overflow-hidden">
       <div className="px-6 py-4 border-b border-border bg-gradient-to-r from-white to-bg">
         <h2 className="font-display text-lg font-semibold text-text">
-          今日时间轴
+          {isReadOnly ? '历史计划' : '今日时间轴'}
         </h2>
         <p className="text-xs text-text-muted mt-1">
-          点击空白时间块添加临时任务，或从右侧拖拽常用任务
+          {isReadOnly 
+            ? '过去的计划不可修改，仅供查看' 
+            : '点击空白时间块添加临时任务，或从右侧拖拽常用任务'}
         </p>
       </div>
       <div
@@ -87,6 +97,7 @@ export const Timeline = forwardRef(({
             onRemoveTask={onRemoveTask}
             isDragOver={dragOverSlot === slot.id}
             onQuickAdd={onQuickAdd}
+            isReadOnly={isReadOnly}
           />
         ))}
       </div>

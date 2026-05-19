@@ -88,12 +88,12 @@ app.delete('/api/tasks/:id', async (req, res) => {
 
 // ========== 日程相关 API ==========
 
-// 获取今日日程
+// 获取指定日期的日程
 app.get('/api/schedule', async (req, res) => {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const date = req.query.date || new Date().toISOString().split('T')[0];
     const schedules = await Schedule.findAll({
-      where: { date: today },
+      where: { date },
       include: [{ model: Task, as: 'task' }]
     });
     
@@ -103,26 +103,41 @@ app.get('/api/schedule', async (req, res) => {
       scheduleMap[s.slotId] = s.taskId;
     });
     
-    res.json(scheduleMap);
+    res.json({ date, schedule: scheduleMap });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch schedule', message: error.message });
+  }
+});
+
+// 获取有计划的日期列表
+app.get('/api/schedule/dates', async (req, res) => {
+  try {
+    const schedules = await Schedule.findAll({
+      attributes: ['date'],
+      group: ['date']
+    });
+    
+    const dates = schedules.map(s => s.date);
+    res.json(dates);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch schedule dates', message: error.message });
   }
 });
 
 // 添加任务到时间块
 app.post('/api/schedule', async (req, res) => {
   try {
-    const { slotId, taskId } = req.body;
-    const today = new Date().toISOString().split('T')[0];
+    const { slotId, taskId, date } = req.body;
+    const scheduleDate = date || new Date().toISOString().split('T')[0];
     
-    // 删除该时间块已有的安排
-    await Schedule.destroy({ where: { slotId, date: today } });
+    // 删除该日期时间块已有的安排
+    await Schedule.destroy({ where: { slotId, date: scheduleDate } });
     
     // 创建新的安排
     const schedule = await Schedule.create({
       slotId,
       taskId,
-      date: today
+      date: scheduleDate
     });
     
     res.status(201).json(schedule);
@@ -134,9 +149,9 @@ app.post('/api/schedule', async (req, res) => {
 // 从时间块移除任务
 app.delete('/api/schedule/:slotId', async (req, res) => {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const date = req.query.date || new Date().toISOString().split('T')[0];
     await Schedule.destroy({
-      where: { slotId: req.params.slotId, date: today }
+      where: { slotId: req.params.slotId, date }
     });
     res.json({ success: true });
   } catch (error) {
@@ -183,12 +198,11 @@ app.put('/api/settings/:key', async (req, res) => {
 // 获取所有数据（兼容旧接口）
 app.get('/api/data', async (req, res) => {
   try {
+    const date = req.query.date || new Date().toISOString().split('T')[0];
     const [commonTasks, tempTasks, schedule, settings] = await Promise.all([
       Task.findAll({ where: { isCommon: true } }),
       Task.findAll({ where: { isCommon: false } }),
-      Schedule.findAll({
-        where: { date: new Date().toISOString().split('T')[0] }
-      }),
+      Schedule.findAll({ where: { date } }),
       Setting.findAll()
     ]);
     
@@ -205,7 +219,8 @@ app.get('/api/data', async (req, res) => {
       commonTasks,
       tempTasks,
       schedule: scheduleMap,
-      granularity: parseInt(granularitySetting?.value || '60')
+      granularity: parseInt(granularitySetting?.value || '60'),
+      date
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch data', message: error.message });
