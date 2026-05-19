@@ -229,10 +229,16 @@ app.post('/api/analyze', async (req, res) => {
       include: [{ model: Task, as: 'task' }]
     });
     
-    // 构建日程文本
+    // 构建日程文本 - 将 slotId 转换为可读时间格式
     const scheduleText = schedules.map(s => {
-      const time = s.slotId.replace('slot-', '').replace('-', ':');
-      return `- ${time} ${s.task?.title || '未知任务'}`;
+      // slotId 格式: slot-HH-MM，例如 slot-09-00
+      const match = s.slotId.match(/slot-(\d{2})-(\d{2})/);
+      if (match) {
+        const hour = match[1];
+        const minute = match[2];
+        return `- ${hour}:${minute} ${s.task?.title || '未知任务'}`;
+      }
+      return `- ${s.slotId} ${s.task?.title || '未知任务'}`;
     }).join('\n');
     
     // 调用 LLM 服务
