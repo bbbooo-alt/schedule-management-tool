@@ -1,17 +1,10 @@
 const express = require('express');
 const cors = require('cors');
-const fetch = require('node-fetch');
-const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
 const { Task, Schedule, Setting, DailyNote, AIHistory, initDatabase } = require('./models');
+const llmService = require('./services/llmService');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
-
-// LLM API 配置
-const LLM_API_KEY = process.env.LLM_API_KEY || '';
-const LLM_API_URL = 'https://api.longcat.chat/openai/v1/chat/completions';
-const LLM_MODEL = 'LongCat-Flash-Chat';
 
 // 中间件
 app.use(cors());
@@ -222,8 +215,12 @@ app.post('/api/analyze', async (req, res) => {
   try {
     const { date, description } = req.body;
     
-    if (!LLM_API_KEY) {
-      return res.status(500).json({ error: 'LLM API key not configured' });
+    // 检查 LLM 是否已配置
+    if (!llmService.isConfigured()) {
+      return res.status(500).json({ 
+        error: 'LLM API 未配置',
+        message: '请在 server/config/llm.js 中配置 API Key'
+      });
     }
     
     // 获取当天的日程
@@ -238,45 +235,8 @@ app.post('/api/analyze', async (req, res) => {
       return `- ${time} ${s.task?.title || '未知任务'}`;
     }).join('\n');
     
-    // 构建提示词
-    const prompt = `请分析以下日程安排和执行情况，给出总结、优化建议和明日推荐计划。
-
-## 今日日程
-${scheduleText || '（今日无安排）'}
-
-## 用户执行描述
-${description || '（用户未提供描述）'}
-
-请从以下几个方面分析：
-1. 今日计划总结：简要总结今日计划的完成情况
-2. 可优化方向：指出时间管理和任务安排中可以改进的地方
-3. 明日推荐计划：根据今日情况，推荐明天的任务安排建议
-
-请用中文回答，格式清晰。`;
-
-    // 调用 LLM API
-    const response = await fetch(LLM_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LLM_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: LLM_MODEL,
-        messages: [
-          { role: 'user', content: prompt }
-        ],
-        max_tokens: 2000,
-        temperature: 0.7
-      })
-    });
-    
-    if (!response.ok) {
-      throw new Error(`LLM API error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    const aiContent = data.choices?.[0]?.message?.content || '分析失败，请重试';
+    // 调用 LLM 服务
+    const aiContent = await llmService.analyzeSchedule(date, scheduleText, description);
     
     // 保存到历史记录
     await AIHistory.create({
@@ -447,5 +407,5 @@ app.post('/api/import', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`Database: SQLite (database.sqlite)`);
-  console.log(`LLM API: ${LLM_API_KEY ? 'Configured' : 'Not configured'}`);
+  console.log(`LLM API: ${llmService.isConfigured() ? 'Configured' : 'Not configured'}`);
 });

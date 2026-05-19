@@ -17,6 +17,9 @@ build/
 .env.test.local
 .env.production.local
 
+# LLM Config (contains API keys)
+server/config/llm.js
+
 # Logs
 logs
 *.log
