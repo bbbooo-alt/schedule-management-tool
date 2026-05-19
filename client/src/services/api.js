@@ -96,6 +96,42 @@ export const removeFromSchedule = async (slotId, date) => {
   return response.json();
 };
 
+// ========== 每日笔记相关 API ==========
+
+// 获取指定日期的笔记
+export const fetchDailyNote = async (date) => {
+  const url = date 
+    ? `${API_BASE_URL}/daily-note?date=${date}` 
+    : `${API_BASE_URL}/daily-note`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('Failed to fetch daily note');
+  return response.json();
+};
+
+// 保存每日描述
+export const saveDailyNote = async (date, description) => {
+  const response = await fetch(`${API_BASE_URL}/daily-note`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date, description }),
+  });
+  if (!response.ok) throw new Error('Failed to save daily note');
+  return response.json();
+};
+
+// ========== AI 分析相关 API ==========
+
+// 调用 AI 分析
+export const analyzeWithAI = async (date, description) => {
+  const response = await fetch(`${API_BASE_URL}/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date, description }),
+  });
+  if (!response.ok) throw new Error('Failed to analyze');
+  return response.json();
+};
+
 // ========== 设置相关 API ==========
 
 // 获取设置

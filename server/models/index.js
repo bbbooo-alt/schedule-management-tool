@@ -93,6 +93,66 @@ const Setting = sequelize.define('Setting', {
   timestamps: false
 });
 
+// 定义 DailyNote 模型（每日描述和AI分析）
+const DailyNote = sequelize.define('DailyNote', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  date: {
+    type: DataTypes.DATEONLY,
+    allowNull: false,
+    unique: true
+  },
+  description: {
+    type: DataTypes.TEXT,
+    defaultValue: ''
+  },
+  aiResponse: {
+    type: DataTypes.TEXT,
+    field: 'ai_response'
+  },
+  createdAt: {
+    type: DataTypes.DATE,
+    defaultValue: Sequelize.NOW,
+    field: 'created_at'
+  },
+  updatedAt: {
+    type: DataTypes.DATE,
+    defaultValue: Sequelize.NOW,
+    field: 'updated_at'
+  }
+}, {
+  tableName: 'daily_notes',
+  timestamps: false
+});
+
+// 定义 AIHistory 模型（AI分析历史记录）
+const AIHistory = sequelize.define('AIHistory', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  date: {
+    type: DataTypes.DATEONLY,
+    allowNull: false
+  },
+  content: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  createdAt: {
+    type: DataTypes.DATE,
+    defaultValue: Sequelize.NOW,
+    field: 'created_at'
+  }
+}, {
+  tableName: 'ai_history',
+  timestamps: false
+});
+
 // 初始化数据库
 async function initDatabase() {
   try {
@@ -118,5 +178,7 @@ module.exports = {
   Task,
   Schedule,
   Setting,
+  DailyNote,
+  AIHistory,
   initDatabase
 };

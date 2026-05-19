@@ -5,6 +5,7 @@ import { Timeline } from './components/Timeline';
 import { AddCommonTaskForm } from './components/AddCommonTaskForm';
 import { TaskLibrary } from './components/TaskLibrary';
 import { Stats } from './components/Stats';
+import { AIAnalysis } from './components/AIAnalysis';
 
 function App() {
   const {
@@ -18,6 +19,14 @@ function App() {
     currentDate,
     scheduledDates,
     isReadOnly,
+    // AI 分析相关
+    dailyDescription,
+    aiResponse,
+    aiHistory,
+    aiLoading,
+    updateDailyDescription,
+    analyzeSchedule,
+    // 操作函数
     addCommonTask,
     deleteCommonTask,
     addTempTask,
@@ -103,6 +112,18 @@ function App() {
               onRemoveTask={removeTaskFromSlot}
               onQuickAdd={handleQuickAdd}
               onTaskDrop={handleTaskDrop}
+              isReadOnly={isReadOnly}
+            />
+            
+            {/* AI 分析区域 */}
+            <AIAnalysis
+              date={currentDate}
+              description={dailyDescription}
+              aiResponse={aiResponse}
+              aiHistory={aiHistory}
+              loading={aiLoading}
+              onDescriptionChange={updateDailyDescription}
+              onAnalyze={analyzeSchedule}
               isReadOnly={isReadOnly}
             />
           </div>

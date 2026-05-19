@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   fetchData,
   fetchScheduleDates,
+  fetchDailyNote,
+  saveDailyNote,
+  analyzeWithAI,
   createTask,
   deleteTask,
   addToSchedule,
@@ -29,20 +32,36 @@ export const useSchedule = () => {
   const [error, setError] = useState(null);
   const [currentDate, setCurrentDate] = useState(getTodayString());
   const [scheduledDates, setScheduledDates] = useState([]);
+  
+  // AI 分析相关状态
+  const [dailyDescription, setDailyDescription] = useState('');
+  const [aiResponse, setAiResponse] = useState(null);
+  const [aiHistory, setAiHistory] = useState([]);
+  const [aiLoading, setAiLoading] = useState(false);
 
   // 从服务器加载数据
   const loadData = useCallback(async (date = currentDate) => {
     try {
       setLoading(true);
-      const [data, dates] = await Promise.all([
+      const [data, dates, dailyNote] = await Promise.all([
         fetchData(date),
-        fetchScheduleDates()
+        fetchScheduleDates(),
+        fetchDailyNote(date)
       ]);
       setCommonTasks(data.commonTasks || []);
       setTempTasks(data.tempTasks || []);
       setSchedule(data.schedule || {});
       setGranularityState(data.granularity || 60);
       setScheduledDates(dates || []);
+      
+      // 加载每日描述和AI回复
+      setDailyDescription(dailyNote?.description || '');
+      setAiResponse(dailyNote?.aiResponse ? {
+        content: dailyNote.aiResponse,
+        createdAt: data.dailyNote?.updatedAt || new Date().toISOString()
+      } : null);
+      setAiHistory(dailyNote?.aiHistory || []);
+      
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -75,6 +94,40 @@ export const useSchedule = () => {
   const changeDate = useCallback((date) => {
     setCurrentDate(date);
   }, []);
+
+  // 更新每日描述
+  const updateDailyDescription = useCallback(async (description) => {
+    setDailyDescription(description);
+    try {
+      await saveDailyNote(currentDate, description);
+    } catch (err) {
+      setError(err.message);
+    }
+  }, [currentDate]);
+
+  // 调用 AI 分析
+  const analyzeSchedule = useCallback(async (description) => {
+    // 过去的日期不允许分析
+    if (isPastDate(currentDate)) {
+      setError('不能分析过去的计划');
+      return;
+    }
+    
+    try {
+      setAiLoading(true);
+      const result = await analyzeWithAI(currentDate, description);
+      setAiResponse(result);
+      // 保存描述
+      await saveDailyNote(currentDate, description);
+      setDailyDescription(description);
+      // 添加到历史记录
+      setAiHistory(prev => [result, ...prev]);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setAiLoading(false);
+    }
+  }, [currentDate]);
 
   // 添加常用任务
   const addCommonTask = useCallback(async (task) => {
@@ -225,6 +278,14 @@ export const useSchedule = () => {
     currentDate,
     scheduledDates,
     isReadOnly,
+    // AI 分析相关
+    dailyDescription,
+    aiResponse,
+    aiHistory,
+    aiLoading,
+    updateDailyDescription,
+    analyzeSchedule,
+    // 操作函数
     addCommonTask,
     deleteCommonTask,
     addTempTask,
