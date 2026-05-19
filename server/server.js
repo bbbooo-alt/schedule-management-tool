@@ -114,12 +114,14 @@ app.get('/api/schedule/dates', async (req, res) => {
   try {
     const schedules = await Schedule.findAll({
       attributes: ['date'],
-      group: ['date']
+      group: ['date'],
+      raw: true
     });
     
     const dates = schedules.map(s => s.date);
     res.json(dates);
   } catch (error) {
+    console.error('Error fetching schedule dates:', error);
     res.status(500).json({ error: 'Failed to fetch schedule dates', message: error.message });
   }
 });
