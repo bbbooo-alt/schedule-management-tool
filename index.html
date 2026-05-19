@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日程管理 | Schedule Master</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style type="text/tailwindcss">
+        @layer base {
+            :root {
+                --color-bg: #faf9f7;
+                --color-surface: #ffffff;
+                --color-surface-hover: #f5f4f2;
+                --color-text: #1a1a1a;
+                --color-text-muted: #6b6b6b;
+                --color-accent: #e07a5f;
+                --color-accent-light: #f4d3ca;
+                --color-success: #81b29a;
+                --color-warning: #f2cc8f;
+                --color-border: #e8e6e3;
+                --shadow-soft: 0 2px 8px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
+                --shadow-hover: 0 4px 16px rgba(0,0,0,0.08), 0 16px 48px rgba(0,0,0,0.12);
+            }
+            body {
+                font-family: 'Noto Sans SC', sans-serif;
+                background-color: var(--color-bg);
+                color: var(--color-text);
+            }
+            .font-display {
+                font-family: 'Playfair Display', serif;
+            }
+        }
+        @layer components {
+            .glass-panel {
+                background: rgba(255, 255, 255, 0.85);
+                backdrop-filter: blur(20px);
+                border: 1px solid var(--color-border);
+            }
+            .time-slot {
+                transition: all 0.2s ease;
+            }
+            .time-slot:hover {
+                background-color: var(--color-surface-hover);
+            }
+            .time-slot.drag-over {
+                background-color: var(--color-accent-light);
+                border-color: var(--color-accent);
+            }
+            .task-card {
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                cursor: grab;
+            }
+            .task-card:active {
+                cursor: grabbing;
+            }
+            .task-card.dragging {
+                opacity: 0.5;
+                transform: rotate(3deg) scale(1.02);
+            }
+            .task-card.drag-preview {
+                position: fixed;
+                pointer-events: none;
+                z-index: 9999;
+                opacity: 0.9;
+                transform: rotate(3deg) scale(1.05);
+                box-shadow: var(--shadow-hover);
+            }
+            .btn-primary {
+                background: linear-gradient(135deg, var(--color-accent) 0%, #d4694f 100%);
+                color: white;
+                transition: all 0.3s ease;
+            }
+            .btn-primary:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 8px 20px rgba(224, 122, 95, 0.4);
+            }
+            .scrollbar-hide::-webkit-scrollbar {
+                display: none;
+            }
+            .scrollbar-hide {
+                -ms-overflow-style: none;
+                scrollbar-width: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useMemo, useRef } = React;
+
+        // 生成时间块
+        const generateTimeSlots = (granularity) => {
+            const slots = [];
+            const totalMinutes = 24 * 60;
+            const slotMinutes = granularity;
+            
+            for (let i = 0; i < totalMinutes; i += slotMinutes) {
+                const hour = Math.floor(i / 60);
+                const minute = i % 60;
+                const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+                slots.push({
+                    id: `slot-${i}`,
+                    time: timeStr,
+                    hour,
+                    minute,
+                    index: i / slotMinutes
+                });
+            }
+            return slots;
+        };
+
+        // 格式化时间显示
+        const formatTimeRange = (slot, granularity) => {
+            const startHour = slot.hour;
+            const startMinute = slot.minute;
+            const endTotalMinutes = startHour * 60 + startMinute + granularity;
+            const endHour = Math.floor(endTotalMinutes / 60) % 24;
+            const endMinute = endTotalMinutes % 60;
+            
+            const start = `${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}`;
+            const end = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
+            return { start, end };
+        };
+
+        // 任务卡片组件
+        const TaskCard = ({ task, draggable = false, onDragStart, onDragEnd, style = {}, className = '' }) => {
+            const cardRef = useRef(null);
+            const [isDragging, setIsDragging] = useState(false);
+
+            const priorityColors = {
+                high: 'bg-red-50 border-red-200 text-red-800',
+                medium: 'bg-amber-50 border-amber-200 text-amber-800',
+                low: 'bg-emerald-50 border-emerald-200 text-emerald-800'
+            };
+
+            const handleMouseDown = (e) => {
+                if (!draggable) return;
+                
+                setIsDragging(true);
+                
+                // 创建拖拽预览元素
+                const preview = cardRef.current.cloneNode(true);
+                preview.classList.add('drag-preview');
+                preview.style.width = `${cardRef.current.offsetWidth}px`;
+                document.body.appendChild(preview);
+                
+                const rect = cardRef.current.getBoundingClientRect();
+                const offsetX = e.clientX - rect.left;
+                const offsetY = e.clientY - rect.top;
+                
+                preview.style.left = `${e.clientX - offsetX}px`;
+                preview.style.top = `${e.clientY - offsetY}px`;
+                
+                onDragStart?.(task, { x: offsetX, y: offsetY });
+
+                const handleMouseMove = (moveEvent) => {
+                    preview.style.left = `${moveEvent.clientX - offsetX}px`;
+                    preview.style.top = `${moveEvent.clientY - offsetY}px`;
+                };
+
+                const handleMouseUp = (upEvent) => {
+                    setIsDragging(false);
+                    document.removeEventListener('mousemove', handleMouseMove);
+                    document.removeEventListener('mouseup', handleMouseUp);
+                    preview.remove();
+                    onDragEnd?.(task, upEvent);
+                };
+
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+            };
+
+            return (
+                <div
+                    ref={cardRef}
+                    onMouseDown={handleMouseDown}
+                    style={style}
+                    className={`
+                        task-card
+                        p-3 rounded-xl border-2 
+                        ${priorityColors[task.priority] || priorityColors.medium}
+                        ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}
+                        ${isDragging ? 'dragging' : ''}
+                        ${className}
+                        select-none
+                    `}
+                >
+                    <div className="flex items-start gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-current mt-2 flex-shrink-0 opacity-60"></div>
+                        <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm leading-relaxed truncate">{task.title}</p>
+                            {task.description && (
+                                <p className="text-xs opacity-70 mt-1 line-clamp-2">{task.description}</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // 时间块组件
+        const TimeSlot = ({ slot, granularity, assignedTask, onRemoveTask, onDropTask, isDragOver }) => {
+            const { start, end } = formatTimeRange(slot, granularity);
+            const isHourStart = slot.minute === 0;
+
+            return (
+                <div
+                    data-slot-id={slot.id}
+                    className={`
+                        time-slot relative border-b border-[var(--color-border)]
+                        ${isDragOver ? 'drag-over' : ''}
+                        ${isHourStart ? 'bg-gradient-to-r from-white to-[var(--color-bg)]' : ''}
+                    `}
+                    style={{ minHeight: granularity <= 30 ? '60px' : '80px' }}
+                >
+                    <div className="flex">
+                        {/* 时间标签 */}
+                        <div className={`
+                            w-20 flex-shrink-0 py-2 px-3 text-right
+                            ${isHourStart ? 'font-semibold text-[var(--color-text)]' : 'text-[var(--color-text-muted)] text-sm'}
+                        `}>
+                            <span>{start}</span>
+                        </div>
+                        
+                        {/* 任务放置区域 */}
+                        <div className="flex-1 p-2 relative">
+                            {assignedTask ? (
+                                <div className="relative group">
+                                    <TaskCard task={assignedTask} />
+                                    <button
+                                        onClick={() => onRemoveTask(slot.id)}
+                                        className="absolute -top-1 -right-1 w-5 h-5 bg-red-400 text-white rounded-full 
+                                                   opacity-0 group-hover:opacity-100 transition-opacity
+                                                   flex items-center justify-center text-xs shadow-sm"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="h-full min-h-[40px] rounded-lg border-2 border-dashed 
+                                              border-[var(--color-border)] opacity-0 hover:opacity-100 
+                                              transition-opacity flex items-center justify-center">
+                                    <span className="text-xs text-[var(--color-text-muted)]">拖放任务到此处</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // 添加任务表单
+        const AddTaskForm = ({ onAdd }) => {
+            const [title, setTitle] = useState('');
+            const [description, setDescription] = useState('');
+            const [priority, setPriority] = useState('medium');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!title.trim()) return;
+                
+                onAdd({
+                    id: `task-${Date.now()}`,
+                    title: title.trim(),
+                    description: description.trim(),
+                    priority,
+                    createdAt: Date.now()
+                });
+                
+                setTitle('');
+                setDescription('');
+                setPriority('medium');
+            };
+
+            return (
+                <form onSubmit={handleSubmit} className="space-y-3">
+                    <div>
+                        <input
+                            type="text"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            placeholder="输入任务名称..."
+                            className="w-full px-4 py-3 rounded-xl border-2 border-[var(--color-border)]
+                                     bg-white focus:border-[var(--color-accent)] focus:outline-none
+                                     transition-colors text-sm"
+                        />
+                    </div>
+                    <div>
+                        <textarea
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            placeholder="任务描述（可选）..."
+                            rows="2"
+                            className="w-full px-4 py-3 rounded-xl border-2 border-[var(--color-border)]
+                                     bg-white focus:border-[var(--color-accent)] focus:outline-none
+                                     transition-colors text-sm resize-none"
+                        />
+                    </div>
+                    <div className="flex gap-2">
+                        {['high', 'medium', 'low'].map((p) => (
+                            <button
+                                key={p}
+                                type="button"
+                                onClick={() => setPriority(p)}
+                                className={`
+                                    flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all
+                                    ${priority === p 
+                                        ? p === 'high' ? 'bg-red-100 text-red-700 border-2 border-red-300'
+                                        : p === 'medium' ? 'bg-amber-100 text-amber-700 border-2 border-amber-300'
+                                        : 'bg-emerald-100 text-emerald-700 border-2 border-emerald-300'
+                                        : 'bg-gray-100 text-gray-600 border-2 border-transparent hover:bg-gray-200'
+                                    }
+                                `}
+                            >
+                                {p === 'high' ? '高优先级' : p === 'medium' ? '中优先级' : '低优先级'}
+                            </button>
+                        ))}
+                    </div>
+                    <button
+                        type="submit"
+                        className="btn-primary w-full py-3 rounded-xl font-medium text-sm"
+                    >
+                        添加任务
+                    </button>
+                </form>
+            );
+        };
+
+        // 主应用组件
+        const ScheduleApp = () => {
+            const [granularity, setGranularity] = useState(60);
+            const [tasks, setTasks] = useState([]);
+            const [schedule, setSchedule] = useState({});
+            const [dragOverSlot, setDragOverSlot] = useState(null);
+            const [draggedTask, setDraggedTask] = useState(null);
+            const timeSlotsContainerRef = useRef(null);
+
+            // 从本地存储加载数据
+            useEffect(() => {
+                const savedTasks = localStorage.getItem('schedule_tasks');
+                const savedSchedule = localStorage.getItem('schedule_schedule');
+                const savedGranularity = localStorage.getItem('schedule_granularity');
+                
+                if (savedTasks) setTasks(JSON.parse(savedTasks));
+                if (savedSchedule) setSchedule(JSON.parse(savedSchedule));
+                if (savedGranularity) setGranularity(parseInt(savedGranularity));
+            }, []);
+
+            // 保存到本地存储
+            useEffect(() => {
+                localStorage.setItem('schedule_tasks', JSON.stringify(tasks));
+                localStorage.setItem('schedule_schedule', JSON.stringify(schedule));
+                localStorage.setItem('schedule_granularity', granularity.toString());
+            }, [tasks, schedule, granularity]);
+
+            const timeSlots = useMemo(() => generateTimeSlots(granularity), [granularity]);
+
+            const handleDragStart = useCallback((task) => {
+                setDraggedTask(task);
+            }, []);
+
+            const handleDragEnd = useCallback((task, event) => {
+                setDraggedTask(null);
+                setDragOverSlot(null);
+
+                // 查找鼠标下方的元素
+                const elementBelow = document.elementFromPoint(event.clientX, event.clientY);
+                if (!elementBelow) return;
+
+                // 查找最近的时间槽
+                const slotElement = elementBelow.closest('[data-slot-id]');
+                if (!slotElement) return;
+
+                const slotId = slotElement.getAttribute('data-slot-id');
+                if (!slotId) return;
+
+                // 更新日程安排
+                setSchedule(prev => {
+                    const newSchedule = { ...prev };
+                    // 移除该任务在其他时间块的安排
+                    Object.keys(newSchedule).forEach(key => {
+                        if (newSchedule[key] === task.id) {
+                            delete newSchedule[key];
+                        }
+                    });
+                    // 添加到新时间块
+                    newSchedule[slotId] = task.id;
+                    return newSchedule;
+                });
+            }, []);
+
+            const handleMouseMove = useCallback((e) => {
+                if (!draggedTask) {
+                    setDragOverSlot(null);
+                    return;
+                }
+
+                const elementBelow = document.elementFromPoint(e.clientX, e.clientY);
+                if (!elementBelow) {
+                    setDragOverSlot(null);
+                    return;
+                }
+
+                const slotElement = elementBelow.closest('[data-slot-id]');
+                if (slotElement) {
+                    setDragOverSlot(slotElement.getAttribute('data-slot-id'));
+                } else {
+                    setDragOverSlot(null);
+                }
+            }, [draggedTask]);
+
+            useEffect(() => {
+                if (draggedTask) {
+                    document.addEventListener('mousemove', handleMouseMove);
+                    return () => document.removeEventListener('mousemove', handleMouseMove);
+                }
+            }, [draggedTask, handleMouseMove]);
+
+            const handleAddTask = useCallback((task) => {
+                setTasks(prev => [...prev, task]);
+            }, []);
+
+            const handleDeleteTask = useCallback((taskId) => {
+                setTasks(prev => prev.filter(t => t.id !== taskId));
+                setSchedule(prev => {
+                    const newSchedule = { ...prev };
+                    Object.keys(newSchedule).forEach(key => {
+                        if (newSchedule[key] === taskId) {
+                            delete newSchedule[key];
+                        }
+                    });
+                    return newSchedule;
+                });
+            }, []);
+
+            const handleRemoveTaskFromSlot = useCallback((slotId) => {
+                setSchedule(prev => {
+                    const newSchedule = { ...prev };
+                    delete newSchedule[slotId];
+                    return newSchedule;
+                });
+            }, []);
+
+            const unscheduledTasks = tasks.filter(task => 
+                !Object.values(schedule).includes(task.id)
+            );
+
+            const getTaskById = (taskId) => tasks.find(t => t.id === taskId);
+
+            return (
+                <div className="min-h-screen bg-[var(--color-bg)]">
+                    {/* 顶部导航 */}
+                    <header className="glass-panel sticky top-0 z-50 border-b">
+                        <div className="max-w-7xl mx-auto px-6 py-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <h1 className="font-display text-2xl font-bold text-[var(--color-text)]">
+                                        日程管理
+                                    </h1>
+                                    <span className="text-[var(--color-text-muted)] text-sm">
+                                        {new Date().toLocaleDateString('zh-CN', { 
+                                            year: 'numeric', 
+                                            month: 'long', 
+                                            day: 'numeric',
+                                            weekday: 'long'
+                                        })}
+                                    </span>
+                                </div>
+                                
+                                {/* 时间粒度选择器 */}
+                                <div className="flex items-center gap-2 bg-white rounded-xl p-1.5 shadow-sm border border-[var(--color-border)]">
+                                    <span className="text-xs text-[var(--color-text-muted)] px-2">时间粒度:</span>
+                                    {[15, 30, 60].map((g) => (
+                                        <button
+                                            key={g}
+                                            onClick={() => setGranularity(g)}
+                                            className={`
+                                                px-3 py-1.5 rounded-lg text-xs font-medium transition-all
+                                                ${granularity === g 
+                                                    ? 'bg-[var(--color-accent)] text-white shadow-sm' 
+                                                    : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]'
+                                                }
+                                            `}
+                                        >
+                                            {g}分钟
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* 主内容区 */}
+                    <main className="max-w-7xl mx-auto px-6 py-6">
+                        <div className="grid grid-cols-12 gap-6">
+                            {/* 左侧：时间轴 */}
+                            <div className="col-span-8">
+                                <div className="glass-panel rounded-2xl shadow-[var(--shadow-soft)] overflow-hidden">
+                                    <div className="px-6 py-4 border-b border-[var(--color-border)] bg-gradient-to-r from-white to-[var(--color-bg)]">
+                                        <h2 className="font-display text-lg font-semibold text-[var(--color-text)]">
+                                            今日时间轴
+                                        </h2>
+                                        <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                                            将任务拖拽到对应时间段进行安排
+                                        </p>
+                                    </div>
+                                    <div 
+                                        ref={timeSlotsContainerRef}
+                                        className="max-h-[calc(100vh-240px)] overflow-y-auto scrollbar-hide"
+                                    >
+                                        {timeSlots.map((slot) => (
+                                            <TimeSlot
+                                                key={slot.id}
+                                                slot={slot}
+                                                granularity={granularity}
+                                                assignedTask={schedule[slot.id] ? getTaskById(schedule[slot.id]) : null}
+                                                onRemoveTask={handleRemoveTaskFromSlot}
+                                                isDragOver={dragOverSlot === slot.id}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 右侧：任务列表 */}
+                            <div className="col-span-4 space-y-4">
+                                {/* 添加任务 */}
+                                <div className="glass-panel rounded-2xl shadow-[var(--shadow-soft)] p-5">
+                                    <h3 className="font-display text-base font-semibold mb-4 text-[var(--color-text)]">
+                                        新建任务
+                                    </h3>
+                                    <AddTaskForm onAdd={handleAddTask} />
+                                </div>
+
+                                {/* 未安排的任务 */}
+                                <div className="glass-panel rounded-2xl shadow-[var(--shadow-soft)] p-5">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="font-display text-base font-semibold text-[var(--color-text)]">
+                                            待安排任务
+                                        </h3>
+                                        <span className="text-xs bg-[var(--color-accent-light)] text-[var(--color-accent)] 
+                                                       px-2 py-1 rounded-full font-medium">
+                                            {unscheduledTasks.length}
+                                        </span>
+                                    </div>
+                                    
+                                    <div className="space-y-3 max-h-[400px] overflow-y-auto scrollbar-hide">
+                                        {unscheduledTasks.length === 0 ? (
+                                            <div className="text-center py-8 text-[var(--color-text-muted)]">
+                                                <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-[var(--color-surface-hover)] 
+                                                              flex items-center justify-center">
+                                                    <svg className="w-8 h-8 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} 
+                                                              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                                    </svg>
+                                                </div>
+                                                <p className="text-sm">暂无待安排任务</p>
+                                                <p className="text-xs opacity-70 mt-1">添加新任务并开始规划你的一天</p>
+                                            </div>
+                                        ) : (
+                                            unscheduledTasks.map((task) => (
+                                                <div key={task.id} className="group relative">
+                                                    <TaskCard 
+                                                        task={task} 
+                                                        draggable={true}
+                                                        onDragStart={handleDragStart}
+                                                        onDragEnd={handleDragEnd}
+                                                    />
+                                                    <button
+                                                        onClick={() => handleDeleteTask(task.id)}
+                                                        className="absolute -top-1 -right-1 w-5 h-5 bg-gray-400 text-white 
+                                                                   rounded-full opacity-0 group-hover:opacity-100 
+                                                                   transition-opacity flex items-center justify-center 
+                                                                   text-xs shadow-sm hover:bg-red-400"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* 统计信息 */}
+                                <div className="glass-panel rounded-2xl shadow-[var(--shadow-soft)] p-5">
+                                    <h3 className="font-display text-base font-semibold mb-4 text-[var(--color-text)]">
+                                        今日概览
+                                    </h3>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div className="text-center p-3 rounded-xl bg-[var(--color-bg)]">
+                                            <div className="text-2xl font-bold text-[var(--color-accent)]">
+                                                {tasks.length}
+                                            </div>
+                                            <div className="text-xs text-[var(--color-text-muted)] mt-1">总任务</div>
+                                        </div>
+                                        <div className="text-center p-3 rounded-xl bg-[var(--color-bg)]">
+                                            <div className="text-2xl font-bold text-[var(--color-success)]">
+                                                {Object.keys(schedule).length}
+                                            </div>
+                                            <div className="text-xs text-[var(--color-text-muted)] mt-1">已安排</div>
+                                        </div>
+                                        <div className="text-center p-3 rounded-xl bg-[var(--color-bg)]">
+                                            <div className="text-2xl font-bold text-[var(--color-warning)]">
+                                                {unscheduledTasks.length}
+                                            </div>
+                                            <div className="text-xs text-[var(--color-text-muted)] mt-1">待安排</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        // 渲染应用
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ScheduleApp />);
+    </script>
+</body>
+</html>
