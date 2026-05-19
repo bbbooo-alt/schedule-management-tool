@@ -80,12 +80,35 @@
                 transform: translateY(-2px);
                 box-shadow: 0 8px 20px rgba(224, 122, 95, 0.4);
             }
+            .btn-secondary {
+                background: var(--color-surface);
+                border: 2px solid var(--color-border);
+                color: var(--color-text);
+                transition: all 0.3s ease;
+            }
+            .btn-secondary:hover {
+                border-color: var(--color-accent);
+                color: var(--color-accent);
+            }
             .scrollbar-hide::-webkit-scrollbar {
                 display: none;
             }
             .scrollbar-hide {
                 -ms-overflow-style: none;
                 scrollbar-width: none;
+            }
+            .quick-input {
+                animation: slideIn 0.2s ease;
+            }
+            @keyframes slideIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(-10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
             }
         }
     </style>
@@ -130,7 +153,7 @@
         };
 
         // 任务卡片组件
-        const TaskCard = ({ task, draggable = false, onDragStart, onDragEnd, style = {}, className = '' }) => {
+        const TaskCard = ({ task, draggable = false, onDragStart, onDragEnd, style = {}, className = '', onClick }) => {
             const cardRef = useRef(null);
             const [isDragging, setIsDragging] = useState(false);
 
@@ -142,6 +165,7 @@
 
             const handleMouseDown = (e) => {
                 if (!draggable) return;
+                if (onClick) return; // 如果有点击事件，不启用拖拽
                 
                 setIsDragging(true);
                 
@@ -181,12 +205,14 @@
                 <div
                     ref={cardRef}
                     onMouseDown={handleMouseDown}
+                    onClick={onClick}
                     style={style}
                     className={`
                         task-card
                         p-3 rounded-xl border-2 
                         ${priorityColors[task.priority] || priorityColors.medium}
                         ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}
+                        ${onClick ? 'cursor-pointer' : ''}
                         ${isDragging ? 'dragging' : ''}
                         ${className}
                         select-none
@@ -205,10 +231,75 @@
             );
         };
 
+        // 快速输入组件
+        const QuickInput = ({ onSubmit, onCancel, placeholder = "输入任务..." }) => {
+            const [value, setValue] = useState('');
+            const inputRef = useRef(null);
+
+            useEffect(() => {
+                inputRef.current?.focus();
+            }, []);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (value.trim()) {
+                    onSubmit(value.trim());
+                }
+            };
+
+            const handleKeyDown = (e) => {
+                if (e.key === 'Escape') {
+                    onCancel();
+                }
+            };
+
+            return (
+                <form onSubmit={handleSubmit} className="quick-input">
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder={placeholder}
+                        className="w-full px-3 py-2 rounded-lg border-2 border-[var(--color-accent)]
+                                 bg-white focus:outline-none text-sm"
+                    />
+                    <div className="flex gap-2 mt-2">
+                        <button
+                            type="submit"
+                            className="flex-1 py-1.5 px-3 rounded-lg bg-[var(--color-accent)] text-white text-xs font-medium"
+                        >
+                            确认
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            className="flex-1 py-1.5 px-3 rounded-lg bg-gray-100 text-gray-600 text-xs font-medium"
+                        >
+                            取消
+                        </button>
+                    </div>
+                </form>
+            );
+        };
+
         // 时间块组件
-        const TimeSlot = ({ slot, granularity, assignedTask, onRemoveTask, onDropTask, isDragOver }) => {
+        const TimeSlot = ({ slot, granularity, assignedTask, onRemoveTask, isDragOver, onQuickAdd }) => {
             const { start, end } = formatTimeRange(slot, granularity);
             const isHourStart = slot.minute === 0;
+            const [showQuickInput, setShowQuickInput] = useState(false);
+
+            const handleClick = () => {
+                if (!assignedTask && !showQuickInput) {
+                    setShowQuickInput(true);
+                }
+            };
+
+            const handleQuickSubmit = (title) => {
+                onQuickAdd(slot.id, title);
+                setShowQuickInput(false);
+            };
 
             return (
                 <div
@@ -230,12 +321,18 @@
                         </div>
                         
                         {/* 任务放置区域 */}
-                        <div className="flex-1 p-2 relative">
+                        <div 
+                            className="flex-1 p-2 relative cursor-pointer"
+                            onClick={handleClick}
+                        >
                             {assignedTask ? (
                                 <div className="relative group">
                                     <TaskCard task={assignedTask} />
                                     <button
-                                        onClick={() => onRemoveTask(slot.id)}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onRemoveTask(slot.id);
+                                        }}
                                         className="absolute -top-1 -right-1 w-5 h-5 bg-red-400 text-white rounded-full 
                                                    opacity-0 group-hover:opacity-100 transition-opacity
                                                    flex items-center justify-center text-xs shadow-sm"
@@ -243,11 +340,17 @@
                                         ×
                                     </button>
                                 </div>
+                            ) : showQuickInput ? (
+                                <QuickInput
+                                    onSubmit={handleQuickSubmit}
+                                    onCancel={() => setShowQuickInput(false)}
+                                    placeholder={`${start} 添加临时任务...`}
+                                />
                             ) : (
                                 <div className="h-full min-h-[40px] rounded-lg border-2 border-dashed 
                                               border-[var(--color-border)] opacity-0 hover:opacity-100 
                                               transition-opacity flex items-center justify-center">
-                                    <span className="text-xs text-[var(--color-text-muted)]">拖放任务到此处</span>
+                                    <span className="text-xs text-[var(--color-text-muted)]">点击添加临时任务</span>
                                 </div>
                             )}
                         </div>
@@ -256,8 +359,8 @@
             );
         };
 
-        // 添加任务表单
-        const AddTaskForm = ({ onAdd }) => {
+        // 添加常用任务表单
+        const AddCommonTaskForm = ({ onAdd }) => {
             const [title, setTitle] = useState('');
             const [description, setDescription] = useState('');
             const [priority, setPriority] = useState('medium');
@@ -267,10 +370,11 @@
                 if (!title.trim()) return;
                 
                 onAdd({
-                    id: `task-${Date.now()}`,
+                    id: `common-task-${Date.now()}`,
                     title: title.trim(),
                     description: description.trim(),
                     priority,
+                    isCommon: true,
                     createdAt: Date.now()
                 });
                 
@@ -286,7 +390,7 @@
                             type="text"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
-                            placeholder="输入任务名称..."
+                            placeholder="输入常用任务名称（如：健身、吃饭、学习）..."
                             className="w-full px-4 py-3 rounded-xl border-2 border-[var(--color-border)]
                                      bg-white focus:border-[var(--color-accent)] focus:outline-none
                                      transition-colors text-sm"
@@ -327,7 +431,7 @@
                         type="submit"
                         className="btn-primary w-full py-3 rounded-xl font-medium text-sm"
                     >
-                        添加任务
+                        添加到常用任务库
                     </button>
                 </form>
             );
@@ -336,29 +440,37 @@
         // 主应用组件
         const ScheduleApp = () => {
             const [granularity, setGranularity] = useState(60);
-            const [tasks, setTasks] = useState([]);
+            // 常用任务库 - 长期保存的日常任务
+            const [commonTasks, setCommonTasks] = useState([]);
+            // 今日临时任务 - 仅当天的特殊任务
+            const [tempTasks, setTempTasks] = useState([]);
+            // 日程安排 - 记录每个时间块分配的任务ID
             const [schedule, setSchedule] = useState({});
             const [dragOverSlot, setDragOverSlot] = useState(null);
             const [draggedTask, setDraggedTask] = useState(null);
+            const [activeTab, setActiveTab] = useState('common'); // 'common' | 'temp'
             const timeSlotsContainerRef = useRef(null);
 
             // 从本地存储加载数据
             useEffect(() => {
-                const savedTasks = localStorage.getItem('schedule_tasks');
+                const savedCommonTasks = localStorage.getItem('schedule_common_tasks');
+                const savedTempTasks = localStorage.getItem('schedule_temp_tasks');
                 const savedSchedule = localStorage.getItem('schedule_schedule');
                 const savedGranularity = localStorage.getItem('schedule_granularity');
                 
-                if (savedTasks) setTasks(JSON.parse(savedTasks));
+                if (savedCommonTasks) setCommonTasks(JSON.parse(savedCommonTasks));
+                if (savedTempTasks) setTempTasks(JSON.parse(savedTempTasks));
                 if (savedSchedule) setSchedule(JSON.parse(savedSchedule));
                 if (savedGranularity) setGranularity(parseInt(savedGranularity));
             }, []);
 
             // 保存到本地存储
             useEffect(() => {
-                localStorage.setItem('schedule_tasks', JSON.stringify(tasks));
+                localStorage.setItem('schedule_common_tasks', JSON.stringify(commonTasks));
+                localStorage.setItem('schedule_temp_tasks', JSON.stringify(tempTasks));
                 localStorage.setItem('schedule_schedule', JSON.stringify(schedule));
                 localStorage.setItem('schedule_granularity', granularity.toString());
-            }, [tasks, schedule, granularity]);
+            }, [commonTasks, tempTasks, schedule, granularity]);
 
             const timeSlots = useMemo(() => generateTimeSlots(granularity), [granularity]);
 
@@ -423,12 +535,15 @@
                 }
             }, [draggedTask, handleMouseMove]);
 
-            const handleAddTask = useCallback((task) => {
-                setTasks(prev => [...prev, task]);
+            // 添加常用任务
+            const handleAddCommonTask = useCallback((task) => {
+                setCommonTasks(prev => [...prev, task]);
             }, []);
 
-            const handleDeleteTask = useCallback((taskId) => {
-                setTasks(prev => prev.filter(t => t.id !== taskId));
+            // 删除常用任务
+            const handleDeleteCommonTask = useCallback((taskId) => {
+                setCommonTasks(prev => prev.filter(t => t.id !== taskId));
+                // 同时从日程中移除
                 setSchedule(prev => {
                     const newSchedule = { ...prev };
                     Object.keys(newSchedule).forEach(key => {
@@ -440,19 +555,58 @@
                 });
             }, []);
 
+            // 快速添加临时任务
+            const handleQuickAddTempTask = useCallback((slotId, title) => {
+                const newTask = {
+                    id: `temp-task-${Date.now()}`,
+                    title,
+                    description: '',
+                    priority: 'medium',
+                    isCommon: false,
+                    createdAt: Date.now()
+                };
+                setTempTasks(prev => [...prev, newTask]);
+                setSchedule(prev => ({
+                    ...prev,
+                    [slotId]: newTask.id
+                }));
+            }, []);
+
+            // 从时间块移除任务
             const handleRemoveTaskFromSlot = useCallback((slotId) => {
+                const taskId = schedule[slotId];
                 setSchedule(prev => {
                     const newSchedule = { ...prev };
                     delete newSchedule[slotId];
                     return newSchedule;
                 });
-            }, []);
+                // 如果是临时任务，同时删除该任务
+                const task = getTaskById(taskId);
+                if (task && !task.isCommon) {
+                    setTempTasks(prev => prev.filter(t => t.id !== taskId));
+                }
+            }, [schedule]);
 
-            const unscheduledTasks = tasks.filter(task => 
+            // 获取所有任务
+            const allTasks = useMemo(() => [...commonTasks, ...tempTasks], [commonTasks, tempTasks]);
+
+            // 获取未安排的任务
+            const unscheduledCommonTasks = commonTasks.filter(task => 
+                !Object.values(schedule).includes(task.id)
+            );
+            const unscheduledTempTasks = tempTasks.filter(task => 
                 !Object.values(schedule).includes(task.id)
             );
 
-            const getTaskById = (taskId) => tasks.find(t => t.id === taskId);
+            const getTaskById = (taskId) => allTasks.find(t => t.id === taskId);
+
+            // 获取今日日期
+            const today = new Date().toLocaleDateString('zh-CN', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                weekday: 'long'
+            });
 
             return (
                 <div className="min-h-screen bg-[var(--color-bg)]">
@@ -465,12 +619,7 @@
                                         日程管理
                                     </h1>
                                     <span className="text-[var(--color-text-muted)] text-sm">
-                                        {new Date().toLocaleDateString('zh-CN', { 
-                                            year: 'numeric', 
-                                            month: 'long', 
-                                            day: 'numeric',
-                                            weekday: 'long'
-                                        })}
+                                        {today}
                                     </span>
                                 </div>
                                 
@@ -508,7 +657,7 @@
                                             今日时间轴
                                         </h2>
                                         <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                                            将任务拖拽到对应时间段进行安排
+                                            点击空白时间块添加临时任务，或从右侧拖拽常用任务
                                         </p>
                                     </div>
                                     <div 
@@ -523,67 +672,111 @@
                                                 assignedTask={schedule[slot.id] ? getTaskById(schedule[slot.id]) : null}
                                                 onRemoveTask={handleRemoveTaskFromSlot}
                                                 isDragOver={dragOverSlot === slot.id}
+                                                onQuickAdd={handleQuickAddTempTask}
                                             />
                                         ))}
                                     </div>
                                 </div>
                             </div>
 
-                            {/* 右侧：任务列表 */}
+                            {/* 右侧：任务管理 */}
                             <div className="col-span-4 space-y-4">
-                                {/* 添加任务 */}
+                                {/* 添加常用任务 */}
                                 <div className="glass-panel rounded-2xl shadow-[var(--shadow-soft)] p-5">
                                     <h3 className="font-display text-base font-semibold mb-4 text-[var(--color-text)]">
-                                        新建任务
+                                        添加常用任务
                                     </h3>
-                                    <AddTaskForm onAdd={handleAddTask} />
+                                    <p className="text-xs text-[var(--color-text-muted)] mb-3">
+                                        日常频发任务（如健身、吃饭、学习）会保存在任务库中，可反复使用
+                                    </p>
+                                    <AddCommonTaskForm onAdd={handleAddCommonTask} />
                                 </div>
 
-                                {/* 未安排的任务 */}
-                                <div className="glass-panel rounded-2xl shadow-[var(--shadow-soft)] p-5">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h3 className="font-display text-base font-semibold text-[var(--color-text)]">
-                                            待安排任务
-                                        </h3>
-                                        <span className="text-xs bg-[var(--color-accent-light)] text-[var(--color-accent)] 
-                                                       px-2 py-1 rounded-full font-medium">
-                                            {unscheduledTasks.length}
-                                        </span>
+                                {/* 任务库标签切换 */}
+                                <div className="glass-panel rounded-2xl shadow-[var(--shadow-soft)] overflow-hidden">
+                                    <div className="flex border-b border-[var(--color-border)]">
+                                        <button
+                                            onClick={() => setActiveTab('common')}
+                                            className={`
+                                                flex-1 py-3 px-4 text-sm font-medium transition-all
+                                                ${activeTab === 'common' 
+                                                    ? 'text-[var(--color-accent)] border-b-2 border-[var(--color-accent)] bg-[var(--color-accent-light)]' 
+                                                    : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]'
+                                                }
+                                            `}
+                                        >
+                                            常用任务库
+                                            <span className="ml-2 text-xs bg-white px-2 py-0.5 rounded-full">
+                                                {unscheduledCommonTasks.length}
+                                            </span>
+                                        </button>
+                                        <button
+                                            onClick={() => setActiveTab('temp')}
+                                            className={`
+                                                flex-1 py-3 px-4 text-sm font-medium transition-all
+                                                ${activeTab === 'temp' 
+                                                    ? 'text-[var(--color-accent)] border-b-2 border-[var(--color-accent)] bg-[var(--color-accent-light)]' 
+                                                    : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]'
+                                                }
+                                            `}
+                                        >
+                                            今日临时任务
+                                            <span className="ml-2 text-xs bg-white px-2 py-0.5 rounded-full">
+                                                {unscheduledTempTasks.length}
+                                            </span>
+                                        </button>
                                     </div>
                                     
-                                    <div className="space-y-3 max-h-[400px] overflow-y-auto scrollbar-hide">
-                                        {unscheduledTasks.length === 0 ? (
-                                            <div className="text-center py-8 text-[var(--color-text-muted)]">
-                                                <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-[var(--color-surface-hover)] 
-                                                              flex items-center justify-center">
-                                                    <svg className="w-8 h-8 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} 
-                                                              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                                    </svg>
-                                                </div>
-                                                <p className="text-sm">暂无待安排任务</p>
-                                                <p className="text-xs opacity-70 mt-1">添加新任务并开始规划你的一天</p>
+                                    <div className="p-5">
+                                        {activeTab === 'common' ? (
+                                            <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-hide">
+                                                {unscheduledCommonTasks.length === 0 ? (
+                                                    <div className="text-center py-6 text-[var(--color-text-muted)]">
+                                                        <p className="text-sm">暂无常用任务</p>
+                                                        <p className="text-xs opacity-70 mt-1">添加日常频发任务到任务库</p>
+                                                    </div>
+                                                ) : (
+                                                    unscheduledCommonTasks.map((task) => (
+                                                        <div key={task.id} className="group relative">
+                                                            <TaskCard 
+                                                                task={task} 
+                                                                draggable={true}
+                                                                onDragStart={handleDragStart}
+                                                                onDragEnd={handleDragEnd}
+                                                            />
+                                                            <button
+                                                                onClick={() => handleDeleteCommonTask(task.id)}
+                                                                className="absolute -top-1 -right-1 w-5 h-5 bg-gray-400 text-white 
+                                                                           rounded-full opacity-0 group-hover:opacity-100 
+                                                                           transition-opacity flex items-center justify-center 
+                                                                           text-xs shadow-sm hover:bg-red-400"
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        </div>
+                                                    ))
+                                                )}
                                             </div>
                                         ) : (
-                                            unscheduledTasks.map((task) => (
-                                                <div key={task.id} className="group relative">
-                                                    <TaskCard 
-                                                        task={task} 
-                                                        draggable={true}
-                                                        onDragStart={handleDragStart}
-                                                        onDragEnd={handleDragEnd}
-                                                    />
-                                                    <button
-                                                        onClick={() => handleDeleteTask(task.id)}
-                                                        className="absolute -top-1 -right-1 w-5 h-5 bg-gray-400 text-white 
-                                                                   rounded-full opacity-0 group-hover:opacity-100 
-                                                                   transition-opacity flex items-center justify-center 
-                                                                   text-xs shadow-sm hover:bg-red-400"
-                                                    >
-                                                        ×
-                                                    </button>
-                                                </div>
-                                            ))
+                                            <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-hide">
+                                                {unscheduledTempTasks.length === 0 ? (
+                                                    <div className="text-center py-6 text-[var(--color-text-muted)]">
+                                                        <p className="text-sm">暂无临时任务</p>
+                                                        <p className="text-xs opacity-70 mt-1">点击时间轴空白处添加临时任务</p>
+                                                    </div>
+                                                ) : (
+                                                    unscheduledTempTasks.map((task) => (
+                                                        <div key={task.id}>
+                                                            <TaskCard 
+                                                                task={task} 
+                                                                draggable={true}
+                                                                onDragStart={handleDragStart}
+                                                                onDragEnd={handleDragEnd}
+                                                            />
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -593,24 +786,18 @@
                                     <h3 className="font-display text-base font-semibold mb-4 text-[var(--color-text)]">
                                         今日概览
                                     </h3>
-                                    <div className="grid grid-cols-3 gap-3">
+                                    <div className="grid grid-cols-2 gap-3">
                                         <div className="text-center p-3 rounded-xl bg-[var(--color-bg)]">
                                             <div className="text-2xl font-bold text-[var(--color-accent)]">
-                                                {tasks.length}
+                                                {Object.keys(schedule).length}
                                             </div>
-                                            <div className="text-xs text-[var(--color-text-muted)] mt-1">总任务</div>
+                                            <div className="text-xs text-[var(--color-text-muted)] mt-1">已安排时间段</div>
                                         </div>
                                         <div className="text-center p-3 rounded-xl bg-[var(--color-bg)]">
                                             <div className="text-2xl font-bold text-[var(--color-success)]">
-                                                {Object.keys(schedule).length}
+                                                {commonTasks.length}
                                             </div>
-                                            <div className="text-xs text-[var(--color-text-muted)] mt-1">已安排</div>
-                                        </div>
-                                        <div className="text-center p-3 rounded-xl bg-[var(--color-bg)]">
-                                            <div className="text-2xl font-bold text-[var(--color-warning)]">
-                                                {unscheduledTasks.length}
-                                            </div>
-                                            <div className="text-xs text-[var(--color-text-muted)] mt-1">待安排</div>
+                                            <div className="text-xs text-[var(--color-text-muted)] mt-1">常用任务数</div>
                                         </div>
                                     </div>
                                 </div>
