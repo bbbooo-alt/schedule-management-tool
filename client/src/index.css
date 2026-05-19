@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg: #faf9f7;
+    --color-surface: #ffffff;
+    --color-surface-hover: #f5f4f2;
+    --color-text: #1a1a1a;
+    --color-text-muted: #6b6b6b;
+    --color-accent: #e07a5f;
+    --color-accent-light: #f4d3ca;
+    --color-success: #81b29a;
+    --color-warning: #f2cc8f;
+    --color-border: #e8e6e3;
+    --shadow-soft: 0 2px 8px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
+    --shadow-hover: 0 4px 16px rgba(0,0,0,0.08), 0 16px 48px rgba(0,0,0,0.12);
+  }
+  
+  body {
+    font-family: 'Noto Sans SC', sans-serif;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+  }
+}
+
+@layer components {
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--color-border);
+  }
+  
+  .time-slot {
+    transition: all 0.2s ease;
+  }
+  
+  .time-slot:hover {
+    background-color: var(--color-surface-hover);
+  }
+  
+  .time-slot.drag-over {
+    background-color: var(--color-accent-light);
+    border-color: var(--color-accent);
+  }
+  
+  .task-card {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: grab;
+  }
+  
+  .task-card:active {
+    cursor: grabbing;
+  }
+  
+  .task-card.dragging {
+    opacity: 0.5;
+    transform: rotate(3deg) scale(1.02);
+  }
+  
+  .task-card.drag-preview {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.9;
+    transform: rotate(3deg) scale(1.05);
+    box-shadow: var(--shadow-hover);
+  }
+  
+  .btn-primary {
+    background: linear-gradient(135deg, var(--color-accent) 0%, #d4694f 100%);
+    color: white;
+    transition: all 0.3s ease;
+  }
+  
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(224, 122, 95, 0.4);
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .quick-input {
+    animation: slideIn 0.2s ease;
+  }
+  
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
