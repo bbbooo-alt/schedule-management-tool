@@ -1,82 +1,233 @@
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs').promises;
-const path = require('path');
+const { Task, Schedule, Setting, initDatabase } = require('./models');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const DATA_DIR = path.join(__dirname, 'data');
-const DATA_FILE = path.join(DATA_DIR, 'schedule-data.json');
 
 // 中间件
 app.use(cors());
 app.use(express.json());
 
-// 确保数据目录存在
-async function ensureDataDir() {
-  try {
-    await fs.access(DATA_DIR);
-  } catch {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-  }
-}
+// 初始化数据库
+initDatabase();
 
-// 读取数据
-async function readData() {
-  try {
-    await ensureDataDir();
-    const data = await fs.readFile(DATA_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch {
-    // 返回默认数据结构
-    return {
-      commonTasks: [],
-      tempTasks: [],
-      schedule: {},
-      granularity: 60,
-      lastUpdated: new Date().toISOString()
-    };
-  }
-}
+// ========== 任务相关 API ==========
 
-// 写入数据
-async function writeData(data) {
-  await ensureDataDir();
-  data.lastUpdated = new Date().toISOString();
-  await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
-}
-
-// 获取所有数据
-app.get('/api/data', async (req, res) => {
+// 获取所有任务
+app.get('/api/tasks', async (req, res) => {
   try {
-    const data = await readData();
-    res.json(data);
+    const tasks = await Task.findAll();
+    res.json(tasks);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to read data', message: error.message });
+    res.status(500).json({ error: 'Failed to fetch tasks', message: error.message });
   }
 });
 
-// 保存所有数据
-app.post('/api/data', async (req, res) => {
+// 获取常用任务
+app.get('/api/tasks/common', async (req, res) => {
   try {
-    const { commonTasks, tempTasks, schedule, granularity } = req.body;
-    const data = {
-      commonTasks: commonTasks || [],
-      tempTasks: tempTasks || [],
-      schedule: schedule || {},
-      granularity: granularity || 60
-    };
-    await writeData(data);
-    res.json({ success: true, data });
+    const tasks = await Task.findAll({ where: { isCommon: true } });
+    res.json(tasks);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to save data', message: error.message });
+    res.status(500).json({ error: 'Failed to fetch common tasks', message: error.message });
+  }
+});
+
+// 获取临时任务
+app.get('/api/tasks/temp', async (req, res) => {
+  try {
+    const tasks = await Task.findAll({ where: { isCommon: false } });
+    res.json(tasks);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch temp tasks', message: error.message });
+  }
+});
+
+// 创建任务
+app.post('/api/tasks', async (req, res) => {
+  try {
+    const task = await Task.create(req.body);
+    res.status(201).json(task);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create task', message: error.message });
+  }
+});
+
+// 更新任务
+app.put('/api/tasks/:id', async (req, res) => {
+  try {
+    const task = await Task.findByPk(req.params.id);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    await task.update(req.body);
+    res.json(task);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update task', message: error.message });
+  }
+});
+
+// 删除任务
+app.delete('/api/tasks/:id', async (req, res) => {
+  try {
+    const task = await Task.findByPk(req.params.id);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    // 删除相关的日程安排
+    await Schedule.destroy({ where: { taskId: req.params.id } });
+    
+    await task.destroy();
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete task', message: error.message });
+  }
+});
+
+// ========== 日程相关 API ==========
+
+// 获取今日日程
+app.get('/api/schedule', async (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const schedules = await Schedule.findAll({
+      where: { date: today },
+      include: [{ model: Task, as: 'task' }]
+    });
+    
+    // 转换为前端需要的格式
+    const scheduleMap = {};
+    schedules.forEach(s => {
+      scheduleMap[s.slotId] = s.taskId;
+    });
+    
+    res.json(scheduleMap);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch schedule', message: error.message });
+  }
+});
+
+// 添加任务到时间块
+app.post('/api/schedule', async (req, res) => {
+  try {
+    const { slotId, taskId } = req.body;
+    const today = new Date().toISOString().split('T')[0];
+    
+    // 删除该时间块已有的安排
+    await Schedule.destroy({ where: { slotId, date: today } });
+    
+    // 创建新的安排
+    const schedule = await Schedule.create({
+      slotId,
+      taskId,
+      date: today
+    });
+    
+    res.status(201).json(schedule);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to add to schedule', message: error.message });
+  }
+});
+
+// 从时间块移除任务
+app.delete('/api/schedule/:slotId', async (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    await Schedule.destroy({
+      where: { slotId: req.params.slotId, date: today }
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to remove from schedule', message: error.message });
+  }
+});
+
+// ========== 设置相关 API ==========
+
+// 获取设置
+app.get('/api/settings', async (req, res) => {
+  try {
+    const settings = await Setting.findAll();
+    const settingsMap = {};
+    settings.forEach(s => {
+      settingsMap[s.key] = s.value;
+    });
+    res.json(settingsMap);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch settings', message: error.message });
+  }
+});
+
+// 更新设置
+app.put('/api/settings/:key', async (req, res) => {
+  try {
+    const { value } = req.body;
+    const setting = await Setting.findOne({ where: { key: req.params.key } });
+    
+    if (setting) {
+      await setting.update({ value });
+    } else {
+      await Setting.create({ key: req.params.key, value });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update setting', message: error.message });
+  }
+});
+
+// ========== 数据汇总 API ==========
+
+// 获取所有数据（兼容旧接口）
+app.get('/api/data', async (req, res) => {
+  try {
+    const [commonTasks, tempTasks, schedule, settings] = await Promise.all([
+      Task.findAll({ where: { isCommon: true } }),
+      Task.findAll({ where: { isCommon: false } }),
+      Schedule.findAll({
+        where: { date: new Date().toISOString().split('T')[0] }
+      }),
+      Setting.findAll()
+    ]);
+    
+    // 转换日程为 map 格式
+    const scheduleMap = {};
+    schedule.forEach(s => {
+      scheduleMap[s.slotId] = s.taskId;
+    });
+    
+    // 获取粒度设置
+    const granularitySetting = settings.find(s => s.key === 'granularity');
+    
+    res.json({
+      commonTasks,
+      tempTasks,
+      schedule: scheduleMap,
+      granularity: parseInt(granularitySetting?.value || '60')
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch data', message: error.message });
   }
 });
 
 // 导出数据（备份）
 app.get('/api/export', async (req, res) => {
   try {
-    const data = await readData();
+    const [tasks, schedules, settings] = await Promise.all([
+      Task.findAll(),
+      Schedule.findAll(),
+      Setting.findAll()
+    ]);
+    
+    const data = {
+      tasks,
+      schedules,
+      settings,
+      exportDate: new Date().toISOString()
+    };
+    
     const backupName = `schedule-backup-${new Date().toISOString().split('T')[0]}.json`;
     res.setHeader('Content-Disposition', `attachment; filename="${backupName}"`);
     res.setHeader('Content-Type', 'application/json');
@@ -89,9 +240,25 @@ app.get('/api/export', async (req, res) => {
 // 导入数据（恢复）
 app.post('/api/import', async (req, res) => {
   try {
-    const data = req.body;
-    await writeData(data);
-    res.json({ success: true, data });
+    const { tasks, schedules, settings } = req.body;
+    
+    // 清空现有数据
+    await Schedule.destroy({ where: {} });
+    await Task.destroy({ where: {} });
+    await Setting.destroy({ where: {} });
+    
+    // 导入数据
+    if (tasks && tasks.length > 0) {
+      await Task.bulkCreate(tasks);
+    }
+    if (schedules && schedules.length > 0) {
+      await Schedule.bulkCreate(schedules);
+    }
+    if (settings && settings.length > 0) {
+      await Setting.bulkCreate(settings);
+    }
+    
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to import data', message: error.message });
   }
@@ -100,5 +267,5 @@ app.post('/api/import', async (req, res) => {
 // 启动服务器
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`Data file location: ${DATA_FILE}`);
+  console.log(`Database: SQLite (database.sqlite)`);
 });

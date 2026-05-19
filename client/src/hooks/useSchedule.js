@@ -1,8 +1,19 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { fetchData, saveData } from '../services/api';
+import {
+  fetchData,
+  fetchCommonTasks,
+  fetchTempTasks,
+  fetchSchedule,
+  fetchSettings,
+  createTask,
+  deleteTask,
+  addToSchedule,
+  removeFromSchedule,
+  updateSetting
+} from '../services/api';
 
 export const useSchedule = () => {
-  const [granularity, setGranularity] = useState(60);
+  const [granularity, setGranularityState] = useState(60);
   const [commonTasks, setCommonTasks] = useState([]);
   const [tempTasks, setTempTasks] = useState([]);
   const [schedule, setSchedule] = useState({});
@@ -18,7 +29,7 @@ export const useSchedule = () => {
         setCommonTasks(data.commonTasks || []);
         setTempTasks(data.tempTasks || []);
         setSchedule(data.schedule || {});
-        setGranularity(data.granularity || 60);
+        setGranularityState(data.granularity || 60);
         setError(null);
       } catch (err) {
         setError(err.message);
@@ -29,87 +40,111 @@ export const useSchedule = () => {
     loadData();
   }, []);
 
-  // 保存数据到服务器
-  const persistData = useCallback(async () => {
+  // 设置粒度并保存到数据库
+  const setGranularity = useCallback(async (value) => {
     try {
-      await saveData({
-        commonTasks,
-        tempTasks,
-        schedule,
-        granularity,
+      setGranularityState(value);
+      await updateSetting('granularity', value.toString());
+    } catch (err) {
+      setError(err.message);
+    }
+  }, []);
+
+  // 添加常用任务
+  const addCommonTask = useCallback(async (task) => {
+    try {
+      const newTask = await createTask(task);
+      setCommonTasks(prev => [...prev, newTask]);
+    } catch (err) {
+      setError(err.message);
+    }
+  }, []);
+
+  // 删除常用任务
+  const deleteCommonTask = useCallback(async (taskId) => {
+    try {
+      await deleteTask(taskId);
+      setCommonTasks(prev => prev.filter(t => t.id !== taskId));
+      // 日程会自动级联删除
+      setSchedule(prev => {
+        const newSchedule = { ...prev };
+        Object.keys(newSchedule).forEach(key => {
+          if (newSchedule[key] === taskId) {
+            delete newSchedule[key];
+          }
+        });
+        return newSchedule;
       });
     } catch (err) {
       setError(err.message);
     }
-  }, [commonTasks, tempTasks, schedule, granularity]);
-
-  // 数据变化时自动保存
-  useEffect(() => {
-    if (!loading) {
-      persistData();
-    }
-  }, [commonTasks, tempTasks, schedule, granularity, loading, persistData]);
-
-  // 添加常用任务
-  const addCommonTask = useCallback((task) => {
-    setCommonTasks(prev => [...prev, task]);
-  }, []);
-
-  // 删除常用任务
-  const deleteCommonTask = useCallback((taskId) => {
-    setCommonTasks(prev => prev.filter(t => t.id !== taskId));
-    // 同时从日程中移除
-    setSchedule(prev => {
-      const newSchedule = { ...prev };
-      Object.keys(newSchedule).forEach(key => {
-        if (newSchedule[key] === taskId) {
-          delete newSchedule[key];
-        }
-      });
-      return newSchedule;
-    });
   }, []);
 
   // 添加临时任务
-  const addTempTask = useCallback((task) => {
-    setTempTasks(prev => [...prev, task]);
+  const addTempTask = useCallback(async (task) => {
+    try {
+      const newTask = await createTask(task);
+      setTempTasks(prev => [...prev, newTask]);
+      return newTask;
+    } catch (err) {
+      setError(err.message);
+      return null;
+    }
   }, []);
 
   // 删除临时任务
-  const deleteTempTask = useCallback((taskId) => {
-    setTempTasks(prev => prev.filter(t => t.id !== taskId));
-    // 同时从日程中移除
-    setSchedule(prev => {
-      const newSchedule = { ...prev };
-      Object.keys(newSchedule).forEach(key => {
-        if (newSchedule[key] === taskId) {
-          delete newSchedule[key];
-        }
+  const deleteTempTask = useCallback(async (taskId) => {
+    try {
+      await deleteTask(taskId);
+      setTempTasks(prev => prev.filter(t => t.id !== taskId));
+      // 日程会自动级联删除
+      setSchedule(prev => {
+        const newSchedule = { ...prev };
+        Object.keys(newSchedule).forEach(key => {
+          if (newSchedule[key] === taskId) {
+            delete newSchedule[key];
+          }
+        });
+        return newSchedule;
       });
-      return newSchedule;
-    });
+    } catch (err) {
+      setError(err.message);
+    }
   }, []);
 
   // 添加任务到时间块
-  const addTaskToSlot = useCallback((slotId, taskId) => {
-    setSchedule(prev => ({
-      ...prev,
-      [slotId]: taskId
-    }));
+  const addTaskToSlot = useCallback(async (slotId, taskId) => {
+    try {
+      await addToSchedule(slotId, taskId);
+      setSchedule(prev => ({
+        ...prev,
+        [slotId]: taskId
+      }));
+    } catch (err) {
+      setError(err.message);
+    }
   }, []);
 
   // 从时间块移除任务
-  const removeTaskFromSlot = useCallback((slotId) => {
-    const taskId = schedule[slotId];
-    setSchedule(prev => {
-      const newSchedule = { ...prev };
-      delete newSchedule[slotId];
-      return newSchedule;
-    });
-    // 如果是临时任务，同时删除该任务
-    const task = getTaskById(taskId);
-    if (task && !task.isCommon) {
-      setTempTasks(prev => prev.filter(t => t.id !== taskId));
+  const removeTaskFromSlot = useCallback(async (slotId) => {
+    try {
+      const taskId = schedule[slotId];
+      await removeFromSchedule(slotId);
+      
+      setSchedule(prev => {
+        const newSchedule = { ...prev };
+        delete newSchedule[slotId];
+        return newSchedule;
+      });
+      
+      // 如果是临时任务，同时删除该任务
+      const task = getTaskById(taskId);
+      if (task && !task.isCommon) {
+        await deleteTask(taskId);
+        setTempTasks(prev => prev.filter(t => t.id !== taskId));
+      }
+    } catch (err) {
+      setError(err.message);
     }
   }, [schedule]);
 
@@ -122,10 +157,27 @@ export const useSchedule = () => {
   }, [allTasks]);
 
   // 获取未安排的临时任务
-  const unscheduledTempTasks = useMemo(() => 
+  const unscheduledTempTasks = useMemo(() =>
     tempTasks.filter(task => !Object.values(schedule).includes(task.id)),
     [tempTasks, schedule]
   );
+
+  // 刷新数据
+  const refreshData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await fetchData();
+      setCommonTasks(data.commonTasks || []);
+      setTempTasks(data.tempTasks || []);
+      setSchedule(data.schedule || {});
+      setGranularityState(data.granularity || 60);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   return {
     granularity,
@@ -144,5 +196,6 @@ export const useSchedule = () => {
     addTaskToSlot,
     removeTaskFromSlot,
     getTaskById,
+    refreshData,
   };
 };

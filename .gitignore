@@ -28,6 +28,9 @@ lerna-debug.log*
 
 # Data files (generated at runtime)
 server/data/
+server/database.sqlite
+*.sqlite
+*.sqlite3
 *.json
 !package.json
 !package-lock.json
