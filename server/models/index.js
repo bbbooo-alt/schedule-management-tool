@@ -153,6 +153,10 @@ const AIHistory = sequelize.define('AIHistory', {
   timestamps: false
 });
 
+// 定义关联关系
+Schedule.belongsTo(Task, { foreignKey: 'taskId', as: 'task' });
+Task.hasMany(Schedule, { foreignKey: 'taskId', as: 'schedules' });
+
 // 初始化数据库
 async function initDatabase() {
   try {
