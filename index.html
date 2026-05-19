@@ -590,10 +590,9 @@
             // 获取所有任务
             const allTasks = useMemo(() => [...commonTasks, ...tempTasks], [commonTasks, tempTasks]);
 
-            // 获取未安排的任务
-            const unscheduledCommonTasks = commonTasks.filter(task => 
-                !Object.values(schedule).includes(task.id)
-            );
+            // 常用任务始终显示在任务库中（支持一天多次使用）
+            const unscheduledCommonTasks = commonTasks;
+            // 临时任务只在未安排时显示
             const unscheduledTempTasks = tempTasks.filter(task => 
                 !Object.values(schedule).includes(task.id)
             );
