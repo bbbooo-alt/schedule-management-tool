@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { useSchedule } from './hooks/useSchedule';
 import { Header } from './components/Header';
 import { Timeline } from './components/Timeline';
@@ -22,6 +22,22 @@ function App() {
     removeTaskFromSlot,
     getTaskById,
   } = useSchedule();
+
+  const timelineRef = useRef(null);
+
+  // 处理拖拽开始
+  const handleDragStart = useCallback((task) => {
+    if (timelineRef.current) {
+      timelineRef.current.setDraggedTask(task);
+    }
+  }, []);
+
+  // 处理拖拽结束
+  const handleDragEnd = useCallback((task, event) => {
+    if (timelineRef.current) {
+      timelineRef.current.handleDragEnd(task, event);
+    }
+  }, []);
 
   // 处理任务拖拽到时间轴
   const handleTaskDrop = useCallback(async (slotId, task) => {
@@ -69,6 +85,7 @@ function App() {
           {/* 左侧：时间轴 */}
           <div className="col-span-8">
             <Timeline
+              ref={timelineRef}
               granularity={granularity}
               schedule={schedule}
               getTaskById={getTaskById}
@@ -95,6 +112,8 @@ function App() {
             <TaskLibrary
               commonTasks={commonTasks}
               tempTasks={unscheduledTempTasks}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
               onDeleteCommonTask={deleteCommonTask}
             />
 

@@ -1,23 +1,25 @@
-import React, { useRef, useCallback, useEffect, useState } from 'react';
+import React, { useRef, useCallback, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
 import { generateTimeSlots } from '../utils/timeUtils';
 import { TimeSlot } from './TimeSlot';
 
-export const Timeline = ({ 
-  granularity, 
-  schedule, 
-  getTaskById, 
-  onRemoveTask, 
+export const Timeline = forwardRef(({
+  granularity,
+  schedule,
+  getTaskById,
+  onRemoveTask,
   onQuickAdd,
   onTaskDrop
-}) => {
+}, ref) => {
   const timeSlots = generateTimeSlots(granularity);
   const containerRef = useRef(null);
   const [dragOverSlot, setDragOverSlot] = useState(null);
   const [draggedTask, setDraggedTask] = useState(null);
 
-  const handleDragStart = useCallback((task) => {
-    setDraggedTask(task);
-  }, []);
+  // 暴露方法给父组件
+  useImperativeHandle(ref, () => ({
+    setDraggedTask,
+    handleDragEnd
+  }));
 
   const handleDragEnd = useCallback((task, event) => {
     setDraggedTask(null);
@@ -62,14 +64,6 @@ export const Timeline = ({
     }
   }, [draggedTask, handleMouseMove]);
 
-  // 暴露拖拽方法给父组件
-  useEffect(() => {
-    window.timelineDragHandlers = {
-      onDragStart: handleDragStart,
-      onDragEnd: handleDragEnd
-    };
-  }, [handleDragStart, handleDragEnd]);
-
   return (
     <div className="glass-panel rounded-2xl shadow-soft overflow-hidden">
       <div className="px-6 py-4 border-b border-border bg-gradient-to-r from-white to-bg">
@@ -80,7 +74,7 @@ export const Timeline = ({
           点击空白时间块添加临时任务，或从右侧拖拽常用任务
         </p>
       </div>
-      <div 
+      <div
         ref={containerRef}
         className="max-h-[calc(100vh-240px)] overflow-y-auto scrollbar-hide"
       >
@@ -98,4 +92,6 @@ export const Timeline = ({
       </div>
     </div>
   );
-};
+});
+
+Timeline.displayName = 'Timeline';
