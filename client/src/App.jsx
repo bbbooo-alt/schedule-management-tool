@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback } from 'react';
 import { useSchedule } from './hooks/useSchedule';
 import { Header } from './components/Header';
 import { Timeline } from './components/Timeline';
@@ -11,7 +11,6 @@ function App() {
     granularity,
     setGranularity,
     commonTasks,
-    tempTasks,
     schedule,
     unscheduledTempTasks,
     loading,
@@ -19,30 +18,18 @@ function App() {
     addCommonTask,
     deleteCommonTask,
     addTempTask,
+    addTaskToSlot,
     removeTaskFromSlot,
     getTaskById,
   } = useSchedule();
 
   // 处理任务拖拽到时间轴
-  const handleTaskDrop = useCallback((slotId, task) => {
-    // 检查该时间块是否已有任务
-    const existingTaskId = schedule[slotId];
-    if (existingTaskId) {
-      const existingTask = getTaskById(existingTaskId);
-      // 如果已有临时任务，删除它
-      if (existingTask && !existingTask.isCommon) {
-        // 这里需要通过 hook 删除临时任务
-      }
-    }
-    
-    // 如果是临时任务，先添加到临时任务列表
-    if (!task.isCommon) {
-      // 临时任务已经在时间轴上创建了
-    }
-  }, [schedule, getTaskById]);
+  const handleTaskDrop = useCallback(async (slotId, task) => {
+    await addTaskToSlot(slotId, task.id);
+  }, [addTaskToSlot]);
 
   // 快速添加临时任务
-  const handleQuickAdd = useCallback((slotId, title) => {
+  const handleQuickAdd = useCallback(async (slotId, title) => {
     const newTask = {
       id: `temp-task-${Date.now()}`,
       title,
@@ -51,10 +38,11 @@ function App() {
       isCommon: false,
       createdAt: Date.now()
     };
-    addTempTask(newTask);
-    // 需要更新 schedule，但 addTempTask 不直接操作 schedule
-    // 这里需要额外的逻辑
-  }, [addTempTask]);
+    const createdTask = await addTempTask(newTask);
+    if (createdTask) {
+      await addTaskToSlot(slotId, createdTask.id);
+    }
+  }, [addTempTask, addTaskToSlot]);
 
   if (loading) {
     return (
@@ -75,7 +63,7 @@ function App() {
   return (
     <div className="min-h-screen bg-bg">
       <Header granularity={granularity} setGranularity={setGranularity} />
-      
+
       <main className="max-w-7xl mx-auto px-6 py-6">
         <div className="grid grid-cols-12 gap-6">
           {/* 左侧：时间轴 */}

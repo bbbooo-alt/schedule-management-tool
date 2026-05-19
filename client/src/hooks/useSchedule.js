@@ -1,10 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   fetchData,
-  fetchCommonTasks,
-  fetchTempTasks,
-  fetchSchedule,
-  fetchSettings,
   createTask,
   deleteTask,
   addToSchedule,
