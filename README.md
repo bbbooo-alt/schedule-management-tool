@@ -81,39 +81,35 @@ git clone https://github.com/bbbooo-alt/Schedule-management-tool.git
 cd Schedule-management-tool
 ```
 
-### 2️⃣ 安装后端依赖
+### 2️⃣ 安装所有依赖
 
 ```bash
-cd server
-npm install
+npm run install:all
 ```
 
-### 3️⃣ 安装前端依赖
+### 3️⃣ 一键启动（推荐）
 
 ```bash
-cd ../client
-npm install
-```
-
-### 4️⃣ 启动服务
-
-**启动后端（端口 3001）：**
-```bash
-cd server
-npm start
-# 或使用 nodemon 开发模式
 npm run dev
 ```
 
-**启动前端（端口 3000）：**
-```bash
-cd client
-npm run dev
-```
+这会同时启动后端（端口 3001）和前端（端口 3000）。
 
-### 5️⃣ 访问应用
+### 4️⃣ 访问应用
 
 打开浏览器访问 http://localhost:3000
+
+---
+
+**手动启动（可选）：**
+
+```bash
+# 后端
+cd server && npm start
+
+# 前端（新终端）
+cd client && npm run dev
+```
 
 ## 📖 使用指南
 
