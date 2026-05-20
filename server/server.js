@@ -131,6 +131,8 @@ app.get('/api/schedule/dates', async (req, res) => {
 app.post('/api/schedule', async (req, res) => {
   try {
     const { slotId, taskId, date } = req.body;
+    console.log('Adding to schedule:', { slotId, taskId, date });
+    
     const scheduleDate = date || new Date().toISOString().split('T')[0];
     
     // 删除该日期时间块已有的安排
@@ -145,6 +147,7 @@ app.post('/api/schedule', async (req, res) => {
     
     res.status(201).json(schedule);
   } catch (error) {
+    console.error('Error adding to schedule:', error);
     res.status(500).json({ error: 'Failed to add to schedule', message: error.message });
   }
 });
